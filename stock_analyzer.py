@@ -10,7 +10,7 @@ sns.set_style("whitegrid")
 
 tickers = ['AAPL', 'MSFT', 'GOOGL', 'TSLA']
 start_date = '2024-01-01'  
-end_date = datetime.today().strftime('2026-01-12') 
+end_date = datetime.today().strftime('%Y-%m-%d') 
 
 data = yf.download(tickers, start=start_date, end=end_date, auto_adjust=False, progress=False)
 
