@@ -82,6 +82,8 @@ summary = pd.DataFrame({
 
 print("\nPortfolio Summary:\n", summary)
 
+'''
+
 plt.figure(figsize=(12, 6))
 prices.plot()
 plt.title('Stock Prices Over Time')
@@ -101,6 +103,31 @@ plt.ylabel('Return (%)')
 plt.savefig('total_returns_bar.png')
 plt.show()
 
+'''
+
+# Sector cumulative returns plot
+plt.figure(figsize=(12, 6))
+sector_cumulative_returns.plot()
+plt.title('Cumulative Returns by Sector')
+plt.ylabel('Cumulative Return')
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+plt.savefig('sector_cumulative_returns.png')
+plt.show()
+
+sector_correlations = sector_daily_returns.corr()
+
+plt.figure(figsize=(10, 8))
+sns.heatmap(sector_correlations, annot=True, cmap='coolwarm')
+plt.title('Sector Return Correlations')
+plt.savefig('sector_correlation_heatmap.png')
+plt.show()
+
+avg_correlation = sector_correlations.mean().sort_values()
+
+print("\nSectors ranked by average correlation (lowest = most diversifying):\n")
+print(avg_correlation.round(2))
+
 # Try a simple linear regression
 
 aapl_prices = prices['AAPL'].dropna()
@@ -113,13 +140,14 @@ model.fit(X, y)
 future_days = np.arange(len(aapl_prices), len(aapl_prices) + 30).reshape(-1, 1)
 predictions = model.predict(future_days)
 
+'''
 plt.figure(figsize=(12, 6))
 plt.plot(aapl_prices.index, aapl_prices, label='Historical')
 plt.plot(pd.date_range(aapl_prices.index[-1], periods=31)[1:], predictions, label='Forecast')
 plt.title('AAPL Price Forecast')
 plt.legend()
-plt.savefig('forecast_plot.png')
 plt.show()
+'''
 
 st.title('Stock Analyzer')
 selected_ticker = st.selectbox('Select Stock', tickers)
@@ -127,9 +155,19 @@ st.line_chart(prices[selected_ticker])
 st.dataframe(summary)
 
 st.subheader("Sector Overview")
-st.dataframe(meta_df[['name', 'sector', 'industry']])
+st.dataframe(meta_df[['ticker', 'sector']])
 
 selected_sector = st.selectbox("Filter by Sector", options=['All'] + list(meta_df['sector'].unique()))
 if selected_sector != 'All':
-    filtered_tickers = meta_df[meta_df['sector'] == selected_sector].index.tolist()
+    filtered_tickers = meta_df[meta_df['sector'] == selected_sector]['ticker'].tolist()
     st.line_chart(prices[filtered_tickers])
+
+st.subheader("Sector Performance Overview")
+st.dataframe(latest_sector_returns.rename("Cumulative Return (%)").sort_values(ascending=False))
+
+st.subheader("Sector Correlation Heatmap")
+st.pyplot(plt.gcf()) 
+
+st.subheader("Most Diversifying Sectors")
+st.write("Sectors with lowest average correlation (better for diversification):")
+st.dataframe(avg_correlation.rename("Avg Correlation").round(2))
