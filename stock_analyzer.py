@@ -6,6 +6,7 @@ from sklearn.linear_model import LinearRegression
 import numpy as np
 from datetime import datetime
 import streamlit as st
+import os
 
 sns.set_style("whitegrid")
 
@@ -23,29 +24,30 @@ tickers = [
 start_date = '2024-01-01'  
 end_date = datetime.today().strftime('%Y-%m-%d') 
 
-data = yf.download(tickers, start=start_date, end=end_date, auto_adjust=False, progress=False)
+@st.cache_data(ttl=3600)  
+def load_stock_data(tickers_list, start, end):
+    data = yf.download(tickers_list, start=start, end=end, auto_adjust=False, progress=False)
+    prices = data.xs('Adj Close', level=0, axis=1, drop_level=True)
+    
+    sector_map = {}
+    for t in tickers_list:
+        try:
+            info = yf.Ticker(t).info
+            sector = info.get('sector', 'Unknown')
+            if sector in ['N/A', '', None]:
+                sector = 'Unknown'
+            sector_map[t] = sector
+        except:
+            sector_map[t] = 'Unknown'
+    
+    meta_df = pd.DataFrame({
+        'ticker': list(sector_map.keys()),
+        'sector': list(sector_map.values())
+    })
+    
+    return prices, meta_df, sector_map
 
-prices = data.xs('Adj Close', level=0, axis=1, drop_level=True)
-
-print(prices.head())
-
-# Fetch metadata for each tickers
-
-sector_map = {}
-for t in tickers:
-    try:
-        info = yf.Ticker(t).info
-        sector = info.get('sector', 'Unknown')
-        if sector in ['N/A', '', None]:
-            sector = 'Unknown'
-        sector_map[t] = sector
-    except Exception:
-        sector_map[t] = 'Unknown'
-
-meta_df = pd.DataFrame({
-    'ticker': list(sector_map.keys()),
-    'sector': list(sector_map.values())
-})
+prices, meta_df, sector_map = load_stock_data(tickers, start_date, end_date)
 
 print("Sector distribution:\n", meta_df['sector'].value_counts())
 
@@ -80,53 +82,32 @@ summary = pd.DataFrame({
     'Total Return (%)': cumulative_returns.iloc[-1] * 100
 })
 
-print("\nPortfolio Summary:\n", summary)
 
-'''
-
-plt.figure(figsize=(12, 6))
-prices.plot()
-plt.title('Stock Prices Over Time')
-plt.ylabel('Adjusted Close Price')
-plt.savefig('prices_plot.png')  
-plt.show()
-
-plt.figure(figsize=(8, 6))
-sns.heatmap(daily_returns.corr(), annot=True, cmap='coolwarm')
-plt.title('Stock Return Correlations')
-plt.savefig('correlation_heatmap.png')
-plt.show()
-
-summary['Total Return (%)'].plot(kind='bar', figsize=(10, 5))
-plt.title('Total Portfolio Returns')
-plt.ylabel('Return (%)')
-plt.savefig('total_returns_bar.png')
-plt.show()
-
-'''
-
-# Sector cumulative returns plot
-plt.figure(figsize=(12, 6))
-sector_cumulative_returns.plot()
-plt.title('Cumulative Returns by Sector')
-plt.ylabel('Cumulative Return')
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-plt.tight_layout()
-plt.savefig('sector_cumulative_returns.png')
-plt.show()
 
 sector_correlations = sector_daily_returns.corr()
 
-plt.figure(figsize=(10, 8))
-sns.heatmap(sector_correlations, annot=True, cmap='coolwarm')
-plt.title('Sector Return Correlations')
-plt.savefig('sector_correlation_heatmap.png')
-plt.show()
-
 avg_correlation = sector_correlations.mean().sort_values()
 
-print("\nSectors ranked by average correlation (lowest = most diversifying):\n")
-print(avg_correlation.round(2))
+heatmap_path = "sector_correlation_heatmap.png"
+if not os.path.exists(heatmap_path):
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(sector_correlations, annot=True, cmap='coolwarm', vmin=-1, vmax=1, fmt='.2f')
+    plt.title('Sector Return Correlations')
+    plt.tight_layout()
+    plt.savefig(heatmap_path)
+    plt.close() 
+
+
+returns_path = 'sector_cumulative_returns.png'
+if not os.path.exists(returns_path):
+    plt.figure(figsize=(12, 6))
+    sector_cumulative_returns.plot()
+    plt.title('Cumulative Returns by Sector')
+    plt.ylabel('Cumulative Return')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.savefig('sector_cumulative_returns.png')
+    plt.close()
 
 # Try a simple linear regression
 
@@ -140,34 +121,30 @@ model.fit(X, y)
 future_days = np.arange(len(aapl_prices), len(aapl_prices) + 30).reshape(-1, 1)
 predictions = model.predict(future_days)
 
-'''
-plt.figure(figsize=(12, 6))
-plt.plot(aapl_prices.index, aapl_prices, label='Historical')
-plt.plot(pd.date_range(aapl_prices.index[-1], periods=31)[1:], predictions, label='Forecast')
-plt.title('AAPL Price Forecast')
-plt.legend()
-plt.show()
-'''
-
 st.title('Stock Analyzer')
-selected_ticker = st.selectbox('Select Stock', tickers)
+
+selected_ticker = st.selectbox('Select Individual Stock', tickers)
 st.line_chart(prices[selected_ticker])
+
 st.dataframe(summary)
-
-st.subheader("Sector Overview")
-st.dataframe(meta_df[['ticker', 'sector']])
-
-selected_sector = st.selectbox("Filter by Sector", options=['All'] + list(meta_df['sector'].unique()))
-if selected_sector != 'All':
-    filtered_tickers = meta_df[meta_df['sector'] == selected_sector]['ticker'].tolist()
-    st.line_chart(prices[filtered_tickers])
 
 st.subheader("Sector Performance Overview")
 st.dataframe(latest_sector_returns.rename("Cumulative Return (%)").sort_values(ascending=False))
 
 st.subheader("Sector Correlation Heatmap")
-st.pyplot(plt.gcf()) 
+st.image(heatmap_path, width="stretch")
 
 st.subheader("Most Diversifying Sectors")
 st.write("Sectors with lowest average correlation (better for diversification):")
 st.dataframe(avg_correlation.rename("Avg Correlation").round(2))
+
+selected_sector = st.selectbox("Filter by Sector", options=['Select a Sector'] + sorted(meta_df['sector'].unique()))
+if selected_sector != 'Select a Sector':
+    filtered_tickers = meta_df[meta_df['sector'] == selected_sector]['ticker'].tolist()
+    if filtered_tickers: 
+        st.line_chart(prices[filtered_tickers])
+    else:
+        st.warning(f"No stocks found in sector: {selected_sector}")
+
+
+# python -m streamlit run stock_analyzer.py
