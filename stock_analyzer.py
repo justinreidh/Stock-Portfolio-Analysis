@@ -7,6 +7,8 @@ import numpy as np
 from datetime import datetime
 import streamlit as st
 import os
+from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
+from scipy.spatial.distance import squareform
 
 sns.set_style("whitegrid")
 
@@ -71,6 +73,20 @@ latest_sector_returns = sector_cumulative_returns.iloc[-1] * 100
 
 rolling_avg = prices.rolling(window=50).mean()
 
+# Calculate rolling correlations 
+
+window_short = 30   
+window_long = 252   
+
+rolling_corr_short = daily_returns.rolling(window_short).corr().dropna()
+rolling_corr_long  = daily_returns.rolling(window_long).corr().dropna()
+
+latest_rolling_short = rolling_corr_short.groupby(level=0).last()  
+
+print("Latest 30-day rolling correlation matrix (sample):\n")
+print(latest_rolling_short.tail(10))  
+
+
 # Summarize and explore data
 
 print("Latest Cumulative Returns by Sector (%):\n")
@@ -97,17 +113,42 @@ if not os.path.exists(heatmap_path):
     plt.savefig(heatmap_path)
     plt.close() 
 
+# Heirarchical Cluster and Dendrogram
 
-returns_path = 'sector_cumulative_returns.png'
-if not os.path.exists(returns_path):
-    plt.figure(figsize=(12, 6))
-    sector_cumulative_returns.plot()
-    plt.title('Cumulative Returns by Sector')
-    plt.ylabel('Cumulative Return')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.tight_layout()
-    plt.savefig('sector_cumulative_returns.png')
+corr_matrix = daily_returns.droplevel('sector', axis=1).corr()
+
+@st.cache_data
+def get_clustering_data(corr):
+    dist = 1 - corr.abs()
+    condensed = squareform(dist)
+    link = linkage(condensed, method='ward')
+    return link, corr.columns
+
+linkage_matrix, labels = get_clustering_data(corr_matrix)
+
+# Then display dendrogram as static image (like before)
+dendro_path = "stock_dendrogram.png"
+if not os.path.exists(dendro_path):
+    plt.figure(figsize=(12,8))
+    dendrogram(linkage_matrix, labels=labels, leaf_rotation=90, color_threshold=0.7)
+    plt.title('Stock Clustering Dendrogram')
+    plt.xlabel('Stocks')
+    plt.ylabel('Distance (1 - |Correlation|)')
+    plt.subplots_adjust(bottom=0.25) 
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95]) 
+    
+    plt.savefig(dendro_path, dpi=150, bbox_inches='tight')  # bbox_inches='tight' crops whitespace intelligently
     plt.close()
+
+
+distance_threshold = 0.7
+
+clusters = fcluster(linkage_matrix, t=distance_threshold, criterion='distance')
+
+cluster_df = pd.DataFrame({
+    'Stock': corr_matrix.columns,
+    'Cluster': clusters
+}).sort_values('Cluster')
 
 # Try a simple linear regression
 
@@ -146,5 +187,13 @@ if selected_sector != 'Select a Sector':
     else:
         st.warning(f"No stocks found in sector: {selected_sector}")
 
+st.subheader("Cluster-Based Diversification Suggestions")
+st.write("Pick **one stock from each cluster** to build a more diversified portfolio:")
+
+st.image(dendro_path, width="stretch")
+
+for cluster_id, group in cluster_df.groupby('Cluster'):
+    st.write(f"**Cluster {cluster_id}** ({len(group)} stocks - highly similar):")
+    st.write(", ".join(group['Stock'].tolist()))
 
 # python -m streamlit run stock_analyzer.py
