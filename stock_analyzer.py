@@ -14,15 +14,15 @@ from scipy.optimize import minimize
 sns.set_style("whitegrid")
 
 tickers = [
-    'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META',     # Tech
-    'JPM', 'V', 'MA', 'BRK-B',                           # Financials
-    'TSLA', 'HD', 'MCD',                                 # Consumer Discretionary
-    'PG', 'KO', 'WMT',                                   # Consumer Staples
-    'LLY', 'JNJ', 'PFE',                                 # Health Care
-    'XOM', 'CVX',                                        # Energy
-    'BA', 'CAT',                                         # Industrials
-    'NFLX',                                              # Communication Services
-    'NEE'                                                # Utilities
+    'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META',    
+    'JPM', 'V', 'MA', 'BRK-B',                          
+    'TSLA', 'HD', 'MCD',                                
+    'PG', 'KO', 'WMT',                                  
+    'LLY', 'JNJ', 'PFE',                                
+    'XOM', 'CVX',                                       
+    'BA', 'CAT',                                        
+    'NFLX',                                             
+    'NEE'                                               
 ]
 start_date = '2024-01-01'  
 end_date = datetime.today().strftime('%Y-%m-%d') 
@@ -191,9 +191,7 @@ st.write("Selecting **one stock from each cluster** could lead to a potentially 
 
 st.image(dendro_path, width="stretch")
 
-for cluster_id, group in cluster_df.groupby('Cluster'):
-    st.write(f"**Cluster {cluster_id}** ({len(group)} stocks):")
-    st.write(", ".join(group['Stock'].tolist()))
+
 
 # -------------- Experiment with portfolio optimization ---
 
@@ -299,5 +297,3 @@ with col2:
     st.write("**Maximum Sharpe Portfolio**")
     st.json({t: round(w, 4) for t, w in zip(tickers, max_sharpe_weights)})
     st.write(f"Return: {max_sharpe_perf[0]:.2%} | Vol: {max_sharpe_perf[1]:.2%} | Sharpe: {max_sharpe_perf[2]:.2f}")
-
-# python -m streamlit run stock_analyzer.py
